@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html data-bs-theme="light" lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <title>Cajal</title>
+    <link rel="stylesheet" href="assets/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="assets/css/Roboto.css">
+    <link rel="stylesheet" href="assets/fonts/fontawesome-all.min.css">
+    <link rel="stylesheet" href="assets/css/slideswitch.css">
+</head>
+
+<body>
+    <div class="container text-center container-fluid" style="margin-top:20px">
+        <div class="row">
+            <div class="col-sm-12 col-med-3 col-lg-3 row"><img class="col-3" src="assets/img/Cajal.svg">
+                <div class="col-7" stylw="margin-top:80px;">
+                    <h5 id="host-name" style="font-size:24px;margin-top:20px">Cajal</h5>
+                    <h6 id="time" style="font-size:16px"></h6>
+                </div><a id="system-info-icon" class="col-1" href="#"><i class="fas fa-cog text-primary col-3" style="font-size: 24px;margin-left: 5px;padding-top: 20px;" onclick=""></i></a>
+            </div>
+        </div>
+        <hr>
+        <div class="row" style="margin-left:5px;margin-right:5px">
+            <div id="system-info" class="col-sm-12 col-md-3 col-lg-3 card display-module d-none" style="margin-bottom:10px;">
+                <div class="row card-body" style="padding:10px;">
+                    <h6 id="title" class="col-6" style="font-size: 24px;width:100%">System Info</h6>
+                    <h6 style="font-size: 16px;width:30%;text-align:left;d-none">Serial #</h6>
+                    <h6 id="serial-number" style="font-size: 16px;width:70%;"></h6>
+                    <h6 style="font-size: 16px;width:70%;text-align:left;">Board Temperature:</h6>
+                    <h6 id="temperature" style="font-size: 16px;width:30%;text-align:right;"></h6>
+                    <h6 style="font-size: 16px;width:48%;text-align:left;">RTC Battery Vol</h6>
+                    <h6 id="rtc-bat-volt" style="font-size: 16px;width:37%;"></h6><i class="fas fa-battery-full" id="rtc-battery-icon" style="font-size: 16px;width:15%;text-align:right;"></i>
+                    <h6 style="font-size: 16px;width:60%;text-align:left;">Internet Ping Time</h6>
+                    <h6 id="internet-ping-time" style="font-size: 16px;width:40%;text-align:right;"></h6>
+                    <hr>
+                    <div id="time-config" class="d-inline-flex" style="margin-top:5px;margin-bottom:10px">
+                        <h6 style="font-size: 16px;width:35%;text-align:center;margin-top:15px;">Set Time:</h6>
+                        <div class="btn-group" role="group" style="font-size: 16px;width:40%;text-align:left;"><button class="btn btn-primary btn-sm" id="manual-time-button" type="button" style="margin:10px;">Manually</button><button class="btn btn-primary btn-sm" id="internet-time-configure-button" type="button" style="margin:10px;">Internet</button></div>
+                    </div>
+                    <hr>
+                    <div id="coordinates" style="margin-top:5px;">
+                        <h5>GPS</h5>
+                        <div class="input-group"><span class="input-group-text">Latitude</span><input class="form-control" type="text" id="latitude"></div>
+                        <div class="input-group" style="margin-top:10px;margin-bottom:10px"><span class="input-group-text">Longitude</span><input class="form-control" type="text" id="longitude"></div><button class="btn btn-success" id="save-gps-button" type="button">Save GPS</button>
+                    </div>
+                </div>
+                <div class="card-footer" style="margin-top:20px;">
+                    <div class="btn-group" role="group"><button class="btn btn-success" id="system-info-cancel" type="button" style="margin-right:20px">Close</button></div>
+                </div>
+            </div>
+            <div id="wifi-info" class="col-sm-12 col-md-3 col-lg-3 card display-module" style="margin-bottom:10px;">
+                <div class="card-header d-inline-flex" style="padding:5px;"><span id="lora-logo" style="font-size:14px;margin:5px;padding-right:1px;">LoRa</span><span id="ds-upload" style="font-size:14px;margin:5px;padding-right:15px;">DS</span><span id="ssid-name" style="margin:5px;font-size:14px;padding-right:20px"></span><i class="fas fa-wifi text-primary" id="wifi-config-icon" style="font-size: 24px;margin-left:5px;padding-left:20px"></i></div>
+                <div class="card-body d-none"></div>
+            </div>
+            <div id="wifi-configure" class="card display-module col-sm-12 col-md-3 col-lg-3 d-none" style="margin-bottom:20px;">
+                <div class="d-inline-flex card-header" style="margin-bottom:20px;">
+                    <h4 style="margin:auto;">Wifi&nbsp; Config</h4>
+                </div>
+                <div class="card-body">
+                    <div class="input-group" style="margin-bottom:10px;"><label class="form-label" style="margin-top:1px;margin-right:5px;">Access Point</label><label class="form-label switch" style="margin-top:-15px;"><input type="checkbox" id="wifi-switch" style="margin-top:-15px;"><span class="slider round">&nbsp;&nbsp;</span></label><label class="form-label" style="margin-top:1px;margin-left:5px;">SSID</label></div>
+                    <div class="input-group station-mode d-inline-flex" id="ssid-grp"><span class="input-group-text">SSID</span><select class="form-select" id="ssid"></select></div>
+                    <div class="input-group station-mode d-inline-flex" id="pass-grp" style="margin-top:20px"><span class="input-group-text">Password</span><input class="form-control" type="password" id="wifi-password"></div>
+                    <div class="input-group station-mode d-inline-flex" id="host-grp" style="margin-top:20px;"><span class="input-group-text">Host Name</span><input class="form-control" type="text" id="hostname"></div>
+                    <div class="input-group station-mode d-inline-flex" id="ipaddress-grp" style="margin-top:20px;"><span class="input-group-text">IP Address</span>
+                        <div class="input-group-text" id="ipaddress"></div>
+                    </div>
+                    <div class="input-group ap-mode d-inline-flex" id="ap-grp"><span class="input-group-text">AP SSID</span><input class="form-control" type="text" id="ap-address"></div>
+                    <div class="input-group ap-mode d-inline-flex" id="ap-pass-grp" style="margin-top:20px"><span class="input-group-text">Password</span><input class="form-control" type="password" id="ap-password"></div>
+                    <div class="input-group ap-mode d-inline-flex" id="ap-host-grp" style="margin-top:20px;"><span class="input-group-text">Host Name</span><input class="form-control" type="text" id="ap-hostname"></div>
+                </div>
+                <div class="card-footer">
+                    <div class="btn-group" role="group"><button class="btn btn-danger btn-sm" id="wifi-configure-cancel" type="button" style="margin-right:20px">Cancel</button><button class="btn btn-success btn-sm" id="wifi-configure-submit" type="button">Save</button></div>
+                </div>
+            </div>
+            <div id="workarea" class="row">
+                <div class="card col-12 d-none" id="pool-pancho" style="border:black 2px solid;">
+                    <div class="card-body row"><img class="col-4" src="assets/img/Pancho.svg" width="1200" height="90" style="padding-left: 0px;margin-right: -13px;padding-top: 0px;margin-top: -3px;">
+                        <div class="col-8 row" style="margin-left:0px"><label class="form-label col-12">Pool Pancho</label><label class="form-label col-12" style="margin-top:-30px">Mode : 1 Flow 1 Tank</label><label class="form-label col-12" style="margin-top:-30px">Lora&nbsp; : snr -9</label></div>
+                        <div class="row"><label class="form-label col-6">Flow : 25 l/s</label><label class="form-label col-6">Total : 2445 l</label><label class="form-label col-1222">Tank 1 : 4500 l&nbsp; (100%)</label></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" role="dialog" tabindex="-1" id="manual-time-modal">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4 class="modal-title">Configure Time Title</h4><button class="btn-close" type="button" aria-label="Close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>The content of your modal.</p><input id="date-input" type="datetime-local" style="margin-right:10px;">
+                    </div>
+                    <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" id="manual-time-submit" type="button">Save</button></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" role="dialog" tabindex="-1" id="show-raw-data-modal">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4 class="modal-title" id="raw-data-title"></h4><button class="btn-close" type="button" aria-label="Close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div>
+                            <ul class="nav nav-tabs" role="tablist">
+                                <li class="nav-item" role="presentation"><a class="nav-link active" role="tab" data-bs-toggle="tab" href="#raw-data-panel">Data</a></li>
+                                <li class="nav-item" role="presentation"><a class="nav-link" role="tab" data-bs-toggle="tab" href="#raw-data-json-panel">JSON</a></li>
+                            </ul>
+                            <div class="tab-content">
+                                <div class="tab-pane active" role="tabpanel" id="raw-data-panel">
+                                    <div id="raw-data-table"></div>
+                                </div>
+                                <div class="tab-pane" role="tabpanel" id="raw-data-json-panel">
+                                    <div id="raw-data-json"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Close</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/bootstrap/js/bootstrap.min.js"></script>
+    <script src="js/index.js"></script>
+    <script src="assets/js/TankAndFlowConstants.js"></script>
+</body>
+
+</html>
