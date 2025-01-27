@@ -289,6 +289,30 @@ $(document).on('click','#manual-time-submit', function (){
      });
  
   });
+  
+  $(document).on('click','#save-timezone-button', function (){
+    var tz = $('#select-timezone').val();
+    var long = $('#longitude').val();
+    if(tz==''){
+        alert("Please select the time zone");
+        return false;
+    }
+    
+    $.ajax({
+      type: "POST",
+      url: "/CajalServlet",
+      data:{formName:"SetTimeZone",tz:tz},
+      success: function (result) {
+          currentData = JSON.parse(result);
+          refreshScreen();
+      },
+      error: function(data){
+          console.log("solo:" + JSON.stringify(data));
+          alert("There was an error processing your request:" + JSON.stringify(data));
+          return false;
+      }
+  });
+});
 
   $(document).on('click','#save-gps-button', function (){
     var lat = $('#latitude').val();
@@ -376,6 +400,22 @@ function refreshData(){
 function refreshScreen(){ 
     $('.display-module').removeClass('d-block').addClass('d-none');
     
+    // timezones
+    //
+    var stz = $("#select-timezone");
+    stz.find('option').remove().end();
+    stz.text("Australia/Adelaide").val("ACST-9:30ACDT,M10.1.0,M4.1.0/3");
+    stz.text("Australia/Brisbane").val("AEST-10");
+    stz.text("Australia/Broken_Hill").val("ACST-9:30ACDT,M10.1.0,M4.1.0/3");
+    stz.text("Australia/Currie").val("AEST-10AEDT,M10.1.0,M4.1.0/3");
+    stz.text("Australia/Darwin").val("ACST-9:30");
+    stz.text("Australia/Eucla").val("<+0845>-8:45");
+    stz.text("Australia/Hobart").val("AEST-10AEDT,M10.1.0,M4.1.0/3");
+    stz.text("vvvAustralia/Lindeman").val("AEST-10");
+    stz.text("Australia/Lord_Howe").val("<+1030>-10:30<+11>-11,M10.1.0,M4.1.0v");
+    stz.text("Australia/Melbourne").val("AEST-10AEDT,M10.1.0,M4.1.0/3");
+    stz.text("Australia/Perth").val("AWST-8");
+    stz.text("Australia/Sydney").val("AEST-10AEDT,M10.1.0,M4.1.0/3");
     
     $("#wifi-config-icon").removeClass (function (index, className) {
         return (className.match (/\btext-\S+/g) || []).join(' ');

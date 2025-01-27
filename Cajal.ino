@@ -7,11 +7,12 @@
 #include <SPI.h>
 
 #include <GloriaTankFlowPumpData.h>
-#include <PanchoTankFlowData.h>
+//#include <PanchoTankFlowData.h>
 #include <LangleyData.h>
 #include <CajalData.h>
-#include <RosieData.h>
-
+//#include <RosieData.h>
+//#include <DaffodilData.h>
+#include <DigitalStablesData.h>
 
 #include <CajalWifiManager.h>
 #include <DataManager.h>
@@ -29,11 +30,12 @@
 #include "OneWire.h"
 #include "DallasTemperature.h"
 #include <GloriaTankFlowPumpSerializer.h>
-#include <PanchoTankFlowSerializer.h>
+#include <DigitalStablesDataSerializer.h>
 #include <Wire.h>
 
 DataManager dataManager(Serial);
 
+boolean debug=false;
 
 String LIFE_CYCLE_EVENT_START_SYNCHRONOUS_CYCLE = "Start Synchronous Cycle";
 String LIFE_CYCLE_EVENT_END_SYNCHRONOUS_CYCLE = "End Synchronous Cycle";
@@ -49,7 +51,7 @@ String USER_COMMAND = "UserCommand";
 Timer ledTimer(LED_TIMER_SECONDS);
 uint8_t currentLedSecond = 0;
 bool gloriaTankFlowPumpNewData = false;
-bool panchoTankFlowDataNewData = false;
+bool digitalStablesDataNewData=false;
 // Variables will change:
 int piControlLastState = LOW;  // the previous state from the input pin
 int piControlCurrentState;     // the current reading from the input pin
@@ -95,9 +97,9 @@ uint8_t serialnumber[8];
 #define OP_MODE 34
 
 Timer dsUploadTimer(60);
-bool timeSet = false;
+bool timeIsSet = false;
 GloriaTankFlowPumpSerializer gloriaTankFlowPumpSerializer;
-PanchoTankFlowSerializer panchoTankFlowSerializer;
+DigitalStablesDataSerializer digitalStablesDataSerializer;;
 
 
 PanchoConfigData panchoConfigData;
@@ -157,11 +159,13 @@ String ipAddress = "";
 bool internetAvailable;
 bool loraActive = false;
 bool inSerial = false;
-
+uint8_t dsUploadTimerCounter;
 //
 // for the different devices
 //
-bool uploadRosieToDS = false;
+
+
+bool uploadDigitalStablesDataToDS=false;
 
 long lastTimeUpdateMillis = 0;
 RTCInfoRecord currentTimerRecord;
@@ -182,7 +186,9 @@ RosieConfigData rosieConfigData;
 GloriaTankFlowPumpData gloriaTankFlowPumpData;
 RosieData rosieData;
 LangleyData langleyData;
-
+DaffodilData daffodilData;
+DigitalStablesData digitalStablesData;
+String timezone;
 
 JSONVar jsonData;
 
@@ -205,6 +211,14 @@ const uint8_t glorianame[] = {
 
 };
 
+
+const uint8_t daffodilname[] = {
+  SEG_B | SEG_C | SEG_D | SEG_E | SEG_G,          // d
+  SEG_A | SEG_B | SEG_C | SEG_E | SEG_F | SEG_G,  // A
+  SEG_F | SEG_G | SEG_A | SEG_E,                  // F
+  SEG_F | SEG_G | SEG_A | SEG_E                   // F
+
+};
 
 const uint8_t panchoname[] = {
   SEG_A | SEG_B | SEG_E | SEG_F | SEG_G,          // P
@@ -232,27 +246,21 @@ const uint8_t flow[] = {
 
 const uint8_t flow2[] = {
 
-  SEG_F | SEG_G | SEG_A | SEG_E,                  // F
-  SEG_F | SEG_E | SEG_D,                          // L
-  SEG_F | SEG_G | SEG_A | SEG_E,                  // F
-  SEG_F | SEG_E | SEG_D                          // L
+  SEG_F | SEG_G | SEG_A | SEG_E,  // F
+  SEG_F | SEG_E | SEG_D,          // L
+  SEG_F | SEG_G | SEG_A | SEG_E,  // F
+  SEG_F | SEG_E | SEG_D           // L
 };
 
 const uint8_t flowtank[] = {
 
-  SEG_F | SEG_G | SEG_A | SEG_E,                  // F
-  SEG_F | SEG_E | SEG_D,                          // L
-  SEG_F | SEG_G | SEG_D | SEG_E,                  // t
+  SEG_F | SEG_G | SEG_A | SEG_E,                 // F
+  SEG_F | SEG_E | SEG_D,                         // L
+  SEG_F | SEG_G | SEG_D | SEG_E,                 // t
   SEG_C | SEG_D | SEG_E | SEG_B | SEG_A | SEG_G  // a
 };
 
-const uint8_t tank[] = {
 
-  SEG_F | SEG_G | SEG_D | SEG_E,                  // t
-  SEG_C | SEG_D | SEG_E | SEG_B | SEG_A | SEG_G,  // a
-  SEG_C | SEG_E | SEG_G,                          // n
-  SEG_G | SEG_D | SEG_E                           // c
-};
 
 const uint8_t tank2[] = {
 
@@ -291,7 +299,7 @@ void LoRa_txMode() {
 
 
 void onReceive(int packetSize) {
-  
+
   loraReceived = true;
   loraPacketSize = packetSize;
 }
@@ -320,7 +328,7 @@ void processLora(int packetSize) {
     lcd.print("In Serial");
     return;
   }
-  if (!timeSet) {
+  if (!timeIsSet) {
     lcd.clear();
     lcd.setCursor(0, 2);
     lcd.print("currentTimerRecord is null");
@@ -357,7 +365,7 @@ void processLora(int packetSize) {
       }
     }
     FastLED.show();
-   // delay(1000);
+    // delay(1000);
     for (int i = 0; i < 8; i++) {
       leds[i] = CRGB(0, 0, 0);
     }
@@ -366,113 +374,13 @@ void processLora(int packetSize) {
     int minute = currentTimerRecord.minute;
     int displaytime = (hour * 100) + minute;
 
-  } else if (packetSize == sizeof(RosieData)) {
-    LoRa.readBytes((uint8_t*)&rosieData, sizeof(RosieData));
-     rosieData.rssi = LoRa.packetRssi();
-    rosieData.snr = LoRa.packetSnr();
-    dataManager.storeRosie(rosieData);
-
-
-    long messageReceivedTime = timeManager.getCurrentTimeInSeconds(currentTimerRecord);
-    lastReceptionRTCInfoRecord.year = currentTimerRecord.year;
-    lastReceptionRTCInfoRecord.month = currentTimerRecord.month;
-    lastReceptionRTCInfoRecord.date = currentTimerRecord.date;
-    lastReceptionRTCInfoRecord.hour = currentTimerRecord.hour;
-    lastReceptionRTCInfoRecord.minute = currentTimerRecord.minute;
-    lastReceptionRTCInfoRecord.second = currentTimerRecord.second;
-
-   
-
-    lcd.setCursor(0, 2);
-    lcd.print(rosieData.devicename);
-    lcd.setCursor(0, 3);
-    lcd.print("sn:");
-    lcd.print(rosieData.snr);
-    lcd.print("  rs:");
-    lcd.print(rosieData.rssi);
-
-
-    // display1.setSegments(rosiename, 4, 0);
-    // display2.clear();
-    // display3.showNumberDec(rosieData.flowRate, false);
-
-    // int liters = rosieData.totalMilliLitres / 1000.0;
-    // int displayD;
-    // if (rosieData.totalMilliLitres < 1000) {
-    //   //   display4.showNumberDec(rosieData.totalMilliLitres, false);
-    // } else {
-    //   if (liters > 1000000) {
-    //     displayD = 100 * liters / 1000000;
-    //     //   display4.showNumberDecEx(displayD, (0x80 >> 1), false);
-    //   } else if (liters > 100000) {
-    //     displayD = 100 * liters / 100000;
-    //     //    display4.showNumberDecEx(displayD, (0x80 >> 1), false);
-    //   } else if (liters > 10000) {
-    //     displayD = 100 * liters / 10000;
-    //     //     display4.showNumberDecEx(displayD, (0x80 >> 1), false);
-    //   } else if (liters < 10000) {
-    //     displayD = (int)liters;
-    //     //   display4.showNumberDec(displayD, false);
-    //   }
-    // }
-
-
-    // display5.showNumberDec(rosieData.flowRate, false);
-    // liters = rosieData.totalMilliLitres2 / 1000.0;
-    // if (rosieData.totalMilliLitres2 < 1000) {
-    //   display6.showNumberDec(rosieData.totalMilliLitres2, false);
-    // } else {
-    //   if (liters > 1000000) {
-    //     displayD = 100 * liters / 1000000;
-    //     //           display6.showNumberDecEx(displayD, (0x80 >> 1), false);
-    //   } else if (liters > 100000) {
-    //     displayD = 100 * liters / 100000;
-    //     //   display6.showNumberDecEx(displayD, (0x80 >> 1), false);
-    //   } else if (liters > 10000) {
-    //     displayD = 100 * liters / 10000;
-    //     //    display6.showNumberDecEx(displayD, (0x80 >> 1), false);
-    //   } else if (liters < 10000) {
-    //     displayD = (int)liters;
-    //     //   display6.showNumberDec(displayD, false);
-    //   }
-    // }
-
-    // int startValue = 0;
-    // int endValue = 4;
-
-
-    // for (int i = startValue; i < endValue; i++) {
-    //   if (rosieData.capacitorVoltage > 4.5) {
-
-    //     leds[i] = CRGB(0, 0, 255);
-    //   } else if (rosieData.capacitorVoltage > 3.75 && rosieData.capacitorVoltage < 4.49) {
-
-    //     leds[i] = CRGB(0, 255, 0);
-    //   } else if (rosieData.capacitorVoltage > 3.25 && rosieData.capacitorVoltage < 3.74) {
-
-    //     leds[i] = CRGB(255, 255, 0);
-    //   } else if (rosieData.capacitorVoltage < 3.25) {
-    //     leds[i] = CRGB(255, 0, 0);
-    //   }
-    // }
-    // FastLED.show();
-    // delay(1000);
-    // for (int i = 0; i < 8; i++) {
-    //   leds[i] = CRGB(0, 0, 0);
-    // }
-
-    // FastLED.show();
-
-
-    int hour = currentTimerRecord.hour;
-    int minute = currentTimerRecord.minute;
   } else if (packetSize == sizeof(GloriaTankFlowPumpData)) {
     memset(&gloriaTankFlowPumpData, 0, sizeof(GloriaTankFlowPumpData));
     LoRa.readBytes((uint8_t*)&gloriaTankFlowPumpData, sizeof(GloriaTankFlowPumpData));
 
     gloriaTankFlowPumpData.rssi = LoRa.packetRssi();
     gloriaTankFlowPumpData.snr = LoRa.packetSnr();
-    
+
     dataManager.storeGloria(gloriaTankFlowPumpData);
     lcd.setCursor(0, 2);
     lcd.print(gloriaTankFlowPumpData.devicename);
@@ -505,15 +413,15 @@ void processLora(int packetSize) {
     gloriaTankFlowPumpNewData = true;
 
 
-  } else if (packetSize == sizeof(PanchoTankFlowData)) {
-    memset(&panchoTankFlowData, 0, sizeof(PanchoTankFlowData));
-    LoRa.readBytes((uint8_t*)&panchoTankFlowData, sizeof(PanchoTankFlowData));
-    panchoTankFlowData.rssi = LoRa.packetRssi();
-    panchoTankFlowData.snr = LoRa.packetSnr();
-    
-    dataManager.storePancho(panchoTankFlowData);
+  }  else if (packetSize == sizeof(DigitalStablesData)) {
+    memset(&digitalStablesData, 0, sizeof(DigitalStablesData));
+    LoRa.readBytes((uint8_t*)&digitalStablesData, sizeof(DigitalStablesData));
+    digitalStablesData.rssi = LoRa.packetRssi();
+    digitalStablesData.snr = LoRa.packetSnr();
+    if(debug)Serial.println("received digitalStablesData");
+    dataManager.storeDigitalStablesData(digitalStablesData);
     lcd.setCursor(0, 2);
-    lcd.print(panchoTankFlowData.devicename);
+    lcd.print(digitalStablesData.deviceshortname);
     long messageReceivedTime = timeManager.getCurrentTimeInSeconds(currentTimerRecord);
     lastReceptionRTCInfoRecord.year = currentTimerRecord.year;
     lastReceptionRTCInfoRecord.month = currentTimerRecord.month;
@@ -522,47 +430,22 @@ void processLora(int packetSize) {
     lastReceptionRTCInfoRecord.minute = currentTimerRecord.minute;
     lastReceptionRTCInfoRecord.second = currentTimerRecord.second;
 
-
-    //  p.secondsTime=messageReceivedTime;
-    panchoTankFlowData.rssi = LoRa.packetRssi();
-    panchoTankFlowData.snr = LoRa.packetSnr();
     lcd.setCursor(0, 3);
     lcd.print("sn:");
-    lcd.print(panchoTankFlowData.snr);
+    lcd.print(daffodilData.snr);
     lcd.print("  rs:");
-    lcd.print(panchoTankFlowData.rssi);
-    // display5.setSegments(panchoname, 4, 0);
-    // display6.setSegments(panchoname, 4, 0);
-
-    // display1.setSegments(panchoname, 4, 0);
-    // display2.setSegments(panchoname, 4, 0);
-    // display3.setSegments(panchoname, 4, 0);
-    // display4.setSegments(panchoname, 4, 0);
-
-
+    lcd.print(daffodilData.rssi);
     int startValue = 0;
     int endValue = 4;
-
-
-
-    for (int i = startValue; i < endValue; i++) {
-      if (panchoTankFlowData.flowRate > 0) {
-        leds[i] = CRGB(0, 0, 255);
-      } else {
-        leds[i] = CRGB(0, 0, 0);
-      }
-    }
-    FastLED.show();
-    for (int i = 0; i < 8; i++) {
-      leds[i] = CRGB(0, 0, 0);
-    }
-
-    FastLED.show();
-
-
-    panchoTankFlowDataNewData = true;
-
-  } else {
+   
+    digitalStablesDataNewData = true;
+     lcd.setCursor(0, 3);
+    lcd.print("Uploading digitalStablesData");
+     int  response = wifiManager.uploadDigitalStablesDataToDigitalStables(digitalStablesData);
+      uploadDigitalStablesDataToDS = false;
+       if(debug)Serial.print(F("Received and Uploaded digitalStablesData to Digital Stables result="));
+    if(debug)Serial.println(response);
+  }  else {
     badPacketCount++;
     lcd.print("  receive bad data size= ");
     lcd.print(packetSize);
@@ -596,9 +479,12 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Wire.begin();
-//disableCore0WDT();
-//disableCore1WDT();
-//disableLoopWDT(); //
+  timezone = "AEST-10AEDT,M10.1.0,M4.1.0/3";
+  setenv("TZ", timezone.c_str(), 1);
+  tzset();
+  //disableCore0WDT();
+  //disableCore1WDT();
+  //disableLoopWDT(); //
   lcd.init();
   lcd.backlight();
   lcd.clear();
@@ -610,7 +496,7 @@ void setup() {
 
     tempSensor.getAddress(address, 0);
     for (uint8_t i = 0; i < 8; i++) {
-      //if (address[i] < 16) Serial.print("0");
+      //if (address[i] < 16) if(debug)Serial.print("0");
       serialNumber += String(address[i], HEX);
     }
 
@@ -766,8 +652,8 @@ void setup() {
   lcd.setCursor(0, 3);
   lcd.print("internet avail=");
   lcd.print(internetAvailable);
-  Serial.print(F("internet avail="));
-  Serial.println(internetAvailable);
+  if(debug)Serial.print(F("internet avail="));
+  if(debug)Serial.println(internetAvailable);
   if (loraActive) {
     leds[1] = CRGB(0, 0, 255);
     // LoRa_rxMode();
@@ -800,6 +686,37 @@ void setup() {
 
 bool doit = true;
 
+uint8_t charToSegment(char c) {
+    switch (toupper(c)) {
+        case 'A': return SEG_A | SEG_B | SEG_C | SEG_E | SEG_F | SEG_G;
+        case 'B': return SEG_C | SEG_D | SEG_E | SEG_F | SEG_G;
+        case 'C': return SEG_A | SEG_D | SEG_E | SEG_F;
+        case 'D': return SEG_B | SEG_C | SEG_D | SEG_E | SEG_G;
+        case 'E': return SEG_A | SEG_D | SEG_E | SEG_F | SEG_G;
+        case 'F': return SEG_A | SEG_E | SEG_F | SEG_G;
+        case 'G': return SEG_A | SEG_C | SEG_D | SEG_E | SEG_F;
+        case 'H': return SEG_B | SEG_C | SEG_E | SEG_F | SEG_G;
+        case 'I': return SEG_E | SEG_F;
+        case 'J': return SEG_B | SEG_C | SEG_D;
+        case 'L': return SEG_D | SEG_E | SEG_F;
+        case 'N': return SEG_A | SEG_B | SEG_C | SEG_E | SEG_F;
+        case 'O': return SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F;
+        case 'P': return SEG_A | SEG_B | SEG_E | SEG_F | SEG_G;
+        case 'R': return SEG_E | SEG_G;
+        case 'S': return SEG_A | SEG_C | SEG_D | SEG_F | SEG_G;
+        case 'T': return SEG_D | SEG_E | SEG_F | SEG_G;
+        case 'U': return SEG_B | SEG_C | SEG_D | SEG_E | SEG_F;
+        case 'Y': return SEG_B | SEG_C | SEG_D | SEG_F | SEG_G;
+        case ' ': return 0;
+        default: return 0;
+    }
+}
+
+void stringToSegments(const char* str, uint8_t* segments, uint8_t length) {
+    for(uint8_t i = 0; i < length; i++) {
+        segments[i] = charToSegment(str[i]);
+    }
+}
 
 void loop() {
   // put your main code here, to run repeatedly:
@@ -814,9 +731,9 @@ void loop() {
 
     secondsSinceLastDataSampling++;
     currentTimerRecord = timeManager.now();
-    timeSet = true;
+    timeIsSet = true;
     wifiManager.setCurrentTimerRecord(currentTimerRecord);
-    uint8_t dsUploadTimerCounter = dsUploadTimer.tick();
+    dsUploadTimerCounter = dsUploadTimer.tick();
     //    Serial.print("dsUploadTimerCounter=");
     // Serial.print(dsUploadTimerCounter);
     //  Serial.print("   stastus=");
@@ -828,14 +745,14 @@ void loop() {
     hour = currentTimerRecord.hour;
     minute = currentTimerRecord.minute;
     second = currentTimerRecord.second;
-    lcd.setCursor(0, 0);
-    lcd.print(hour);
-    lcd.print(":");
-    lcd.print(minute);
-    lcd.print(":");
-    lcd.print(second);
-    lcd.print(" ");
-    lcd.print(currentLedSecond);
+//    lcd.setCursor(0, 0);
+//    lcd.print(hour);
+//    lcd.print(":");
+//    lcd.print(minute);
+//    lcd.print(":");
+//    lcd.print(second);
+//    lcd.print(" ");
+//    lcd.print(currentLedSecond);
 
     if (ledTimer.status()) {
       currentLedSecond++;
@@ -850,7 +767,7 @@ void loop() {
           }
         }
         FastLED.show();
-     //   delay(100);
+        //   delay(100);
       } else {
         currentLedSecond = 0;
         for (int i = 4; i < 12; i++) {
@@ -860,13 +777,12 @@ void loop() {
       }
       ledTimer.reset();
     }
-
   }
 
 
   if (loraReceived) {
-    Serial.printf("lora recive Free Heap: %d \n",xPortGetFreeHeapSize());
-    Serial.printf("lora recive loraPacketSize: %d \n",loraPacketSize);
+    //Serial.printf("lora recive Free Heap: %d \n", xPortGetFreeHeapSize());
+    if(debug)Serial.printf("lora recive loraPacketSize: %d \n", loraPacketSize);
     processLora(loraPacketSize);
     loraReceived = false;
     bool show = false;
@@ -878,8 +794,8 @@ void loop() {
     // display6.clear();
     // delay(1000);
     if (loraPacketSize == sizeof(LangleyData)) {
-      lcd.setCursor(0, 2);
-      lcd.print(F("Received "));
+ //     lcd.setCursor(0, 2);
+  //    lcd.print(F("Received "));
       // lcd.print(langleyname);
 
       display1.setSegments(langleyname, 4, 0);
@@ -890,49 +806,7 @@ void loop() {
       display5.showNumberDec(gloriaTankFlowPumpData.snr, false);
       display6.showNumberDec(gloriaTankFlowPumpData.rssi, false);
 
-    } else if (loraPacketSize == sizeof(RosieData)) {
-      uploadRosieToDS = true;
-      display1.setSegments(rosiename, 4, 0);
-      if (rosieData.currentFunctionValue == FUN_1_FLOW) {
-        display2.setSegments(flow, 4, 0);
-
-      } else if ( rosieData.currentFunctionValue == FUN_2_FLOW) {
-        display2.setSegments(flow2, 4, 0);
-      } else if ( rosieData.currentFunctionValue == FUN_1_FLOW_1_TANK) {
-        display2.setSegments(flowtank, 4, 0);
-      } else if ( rosieData.currentFunctionValue == FUN_1_TANK) {
-        display2.setSegments(tank, 4, 0);
-      } else if (rosieData.currentFunctionValue == FUN_2_TANK) {
-        display2.setSegments(tank2, 4, 0);
-      }
-      display3.showNumberDec(rosieData.capacitorVoltage, false);
-      display4.showNumberDec(rosieData.solarVoltage, false);
-      display5.showNumberDec(rosieData.flowRate, false);
-
-      int liters = rosieData.totalMilliLitres / 1000.0;
-      int displayD;
-      if (rosieData.totalMilliLitres < 1000) {
-        display6.showNumberDec(rosieData.totalMilliLitres, false);
-      } else {
-        if (liters > 1000000) {
-          displayD = 100 * liters / 1000000;
-          display6.showNumberDecEx(displayD, (0x80 >> 1), false);
-        } else if (liters > 100000) {
-          displayD = 100 * liters / 100000;
-          display6.showNumberDecEx(displayD, (0x80 >> 1), false);
-        } else if (liters > 10000) {
-          displayD = 100 * liters / 10000;
-          display6.showNumberDecEx(displayD, (0x80 >> 1), false);
-        } else if (liters < 10000) {
-          displayD = (int)liters;
-          display6.showNumberDec(displayD, false);
-        }
-      }
-      //
-      // push to digitalstables
-      //
-
-    } else if (loraPacketSize == sizeof(GloriaTankFlowPumpData)) {
+    }else if (loraPacketSize == sizeof(GloriaTankFlowPumpData)) {
       display1.setSegments(glorianame, 4, 0);
       display2.showNumberDec(hour, false);
       display3.showNumberDec(minute, false);
@@ -960,36 +834,88 @@ void loop() {
       } else {
         display6.showNumberDec(rssii, false);
       }
-    } else if (loraPacketSize == sizeof(PanchoTankFlowData)) {
+    } else if (loraPacketSize == sizeof(DigitalStablesData)) {
+      uploadDigitalStablesDataToDS=true;
       show = true;
-      display1.setSegments(panchoname, 4, 0);
-      display2.showNumberDec(hour, false);
-      display3.showNumberDec(second, false);
+        
+      if(debug)Serial.print("line 1079, deviceshortname=");
+      if(debug)Serial.println(digitalStablesData.deviceshortname);
+      
+      uint8_t segments[4];
+      stringToSegments(digitalStablesData.deviceshortname, segments, 4);
+      display1.setSegments(segments, 4, 0);
+  
+      if (digitalStablesData.currentFunctionValue == FUN_1_FLOW){
+        
+      }else if (digitalStablesData.currentFunctionValue == FUN_2_FLOW){
+        
+      }else if (digitalStablesData.currentFunctionValue == FUN_1_FLOW_1_TANK){
+        
+      }else if (digitalStablesData.currentFunctionValue == FUN_1_TANK){
+        
+      }else if (digitalStablesData.currentFunctionValue == FUN_2_TANK){
+        
+      }else if (digitalStablesData.currentFunctionValue == DAFFODIL_SCEPTIC_TANK){
 
-      int rtcBatVolti = processDisplayValue(panchoTankFlowData.rtcBatVolt, &displayData);
-      int dp4 = displayData.dp;
-      if (dp4 > 0) {
-        display4.showNumberDecEx(rtcBatVolti, (0x80 >> dp4), false);
-      } else {
-        display4.showNumberDec(rtcBatVolti, false);
+          String timeString = TimeUtils::epochToString(digitalStablesData.secondsTime);
+          if(debug)Serial.print("timeString=");
+          if(debug)Serial.println(timeString);
+            
+          int numericTime = TimeUtils::epochToNumericTime(digitalStablesData.secondsTime, timezone);
+          if(debug)Serial.print("numerictime=");
+          if(debug)Serial.println(numericTime);
+          
+          display2.showNumberDecEx(numericTime, (0x80 >> 1), false);
+          
+          display3.setSegments(tank, 4, 0);
+          int scepticAvailablePercentage = processDisplayValue(digitalStablesData.scepticAvailablePercentage, &displayData);
+          int dp4 = displayData.dp;
+          if (dp4 > 0) {
+            display4.showNumberDecEx(scepticAvailablePercentage, (0x80 >> dp4), false);
+          } else {
+            display4.showNumberDec(scepticAvailablePercentage, false);
+          }
+
+          display5.setSegments(templabel, 2, 0);
+    
+          int outdoortemperature = processDisplayValue(digitalStablesData.outdoortemperature, &displayData);
+          int dp6 = displayData.dp;
+          if (dp6 > 0) {
+            display6.showNumberDecEx(outdoortemperature, (0x80 >> dp6), false);
+          } else {
+            display6.showNumberDec(outdoortemperature, false);
+          }
+//    
+//          int outdoorhumidity = processDisplayValue(digitalStablesData.outdoorhumidity, &displayData);
+//          int dp4 = displayData.dp;
+//          if (dp4> 0) {
+//            display4.showNumberDecEx(outdoorhumidity, (0x80 >> dp4), false);
+//          } else {
+//            display4.showNumberDec(outdoorhumidity, false);
+//          }
+//
+//          int capacitorVoltage = processDisplayValue(digitalStablesData.capacitorVoltage, &displayData);
+//          int dp5 = displayData.dp;
+//          if (dp5 > 0) {
+//            display5.showNumberDecEx(capacitorVoltage, (0x80 >> dp5), false);
+//          } else {
+//            display5.showNumberDec(capacitorVoltage, false);
+//          }
+//    
+//          int rssii = processDisplayValue(digitalStablesData.rssi, &displayData);
+//          int dp6 = displayData.dp;
+//          if (dp6 > 0) {
+//            display6.showNumberDecEx(rssii, (0x80 >> dp6), false);
+//          } else {
+//            display6.showNumberDec(rssii, false);
+//          }
+      }else if (digitalStablesData.currentFunctionValue == DAFFODIL_WATER_TROUGH){
+        
+      }else if (digitalStablesData.currentFunctionValue == DAFFODIL_TEMP_SOILMOISTURE){
+        
+      }else if (digitalStablesData.currentFunctionValue == DAFFODIL_LIGHT_DETECTOR){
+        
       }
-
-      int snri = processDisplayValue(panchoTankFlowData.snr, &displayData);
-      int dp5 = displayData.dp;
-      if (dp5 > 0) {
-        display5.showNumberDecEx(snri, (0x80 >> dp5), false);
-      } else {
-        display5.showNumberDec(snri, false);
-      }
-
-      int rssii = processDisplayValue(panchoTankFlowData.rssi, &displayData);
-      int dp6 = displayData.dp;
-      if (dp6 > 0) {
-        display6.showNumberDecEx(rssii, (0x80 >> dp6), false);
-      } else {
-        display6.showNumberDec(rssii, false);
-      }
-
       //  delay(500);
     }
     // currentPalette = RainbowStripeColors_p;
@@ -998,11 +924,24 @@ void loop() {
   }
   loraPacketSize = 0;
 
+//    lcd.clear();
+//    lcd.setCursor(0, 0);
+//    lcd.print("internetAvailable=");
+//    lcd.print(internetAvailable);
+//    lcd.setCursor(0, 1);
+//    lcd.print("dsUploadTimerCounter = ");
+//    lcd.print(dsUploadTimerCounter);
 
+//     Serial.print(F("internetAvailable="));
+//     Serial.println(internetAvailable);
+//     Serial.print("dsUploadTimerCounter = ");
+//     Serial.println(dsUploadTimerCounter);
+ 
   if (dsUploadTimer.status() && internetAvailable) {
     //char secret[27];
-    //   lcd.print("Uploading to digitalstables");
-    Serial.println(F("Uploading to digitalstables"));
+//    lcd.setCursor(0, 2);
+//    lcd.print("Uploading to digitalstables");
+    if(debug)Serial.println(F("Uploading to digitalstables"));
     String secret = "J5KFCNCPIRCTGT2UJUZFSMQK";
 
     leds[2] = CRGB(0, 255, 0);
@@ -1019,12 +958,9 @@ void loop() {
 
     wifiManager.setCurrentToTpCode(code);
     uint16_t response = 0;
-    if (uploadRosieToDS) {
-      //      response = wifiManager.uploadRosieDataToDigitalStables(rosieData);
-      uploadRosieToDS = false;
-    }
 
-    //int response = wifiManager.uploadDataToDigitalStables();
+    
+    response = wifiManager.uploadDataToDigitalStables();
 
     if (response == 200) {
       leds[2] = CRGB(0, 0, 255);
@@ -1038,7 +974,7 @@ void loop() {
     FastLED.show();
 
     dsUploadTimer.reset();
-    Serial.printf("after upload to Free Heap: %d \n",xPortGetFreeHeapSize());
+    if(debug)Serial.printf("after upload to Free Heap: %d \n", xPortGetFreeHeapSize());
   }
 
   if (Serial.available() != 0) {
@@ -1046,7 +982,8 @@ void loop() {
 
     LoRa_txMode();
     String command = Serial.readString();
-    lcd.setCursor(0, 2);
+    lcd.clear();
+    lcd.setCursor(0, 0);
     lcd.print(F("cmd="));
     lcd.print(command);
 
@@ -1057,10 +994,10 @@ void loop() {
       Serial.println(LIFE_CYCLE_EVENT_START_AWAKE);
       currentPalette = RainbowStripeColors_p;
       currentBlending = NOBLEND;
-      performLedShow(500);
+      //performLedShow(500);
     } else if (command == LIFE_CYCLE_EVENT_END_AWAKE) {
       // currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND;
-      // performLedShow(500);
+      // //performLedShow(500);
       Serial.print(F("Ok-"));
       Serial.println(LIFE_CYCLE_EVENT_END_AWAKE);
     } else if (command == LIFE_CYCLE_EVENT_START_SYNCHRONOUS_CYCLE) {
@@ -1072,7 +1009,7 @@ void loop() {
       userCommandState = "Ok";
       SetupPurpleAndGreenPalette();
       currentBlending = LINEARBLEND;
-      performLedShow(500);
+      //performLedShow(500);
       for (int i = 12; i < 16; i++) {
         leds[i] = CRGB(0, 0, 255);
       }
@@ -1085,7 +1022,7 @@ void loop() {
       // FastLED.show();
       SetupPurpleAndGreenPalette();
       currentBlending = LINEARBLEND;
-      performLedShow(500);
+      //performLedShow(500);
       Serial.print(F("Ok-"));
       Serial.println(LIFE_CYCLE_EVENT_END_SYNCHRONOUS_CYCLE);
     } else if (command == LIFE_CYCLE_EVENT_START_ASYNCHRONOUS_CYCLE) {
@@ -1096,7 +1033,7 @@ void loop() {
       piCurrentState = PI_STATE_ASYNC;
       SetupBlackAndWhiteStripedPalette();
       currentBlending = NOBLEND;
-      performLedShow(500);
+      //performLedShow(500);
       for (int i = 12; i < 16; i++) {
         leds[i] = CRGB(0, 255, 0);
       }
@@ -1110,7 +1047,8 @@ void loop() {
       Serial.println(LIFE_CYCLE_EVENT_END_ASYNCHRONOUS_CYCLE);
     } else if (command.startsWith("Ping")) {
       Serial.println(F("Ok-Ping"));
-      performLedShow(500);
+      Serial.flush();
+      //performLedShow(500);
     } else if (command.startsWith("ScanNetworks")) {
       wifiManager.scanNetworks();
     } else if (command.startsWith("SetGroupId")) {
@@ -1120,6 +1058,28 @@ void loop() {
       lcd.print(grpId);
 
       lcd.print(F("Ok-SetGroupId"));
+    } else if (command.startsWith("SetDeviceSensorConfig")) {
+      // SetDeviceSensorConfig#DaffOffice#OFDA#NoSensor#Temperature#AEST-10AEDT,M10.1.0,M4.1.0/3#-37.13305556#144.47472222#
+      String devicename = generalFunctions.getValue(command, '#', 1);
+      String deviceshortname = generalFunctions.getValue(command, '#', 2);
+      String sensor1name = generalFunctions.getValue(command, '#', 3);
+      String sensor2name = generalFunctions.getValue(command, '#', 4);
+
+      String timezone = generalFunctions.getValue(command, '#', 5);
+      Serial.print("timezone received=");
+      Serial.println(timezone);
+      double latitude=generalFunctions.stringToDouble(generalFunctions.getValue(command, '#', 6));
+      double longitude=generalFunctions.stringToDouble(generalFunctions.getValue(command, '#', 7));
+      uint8_t devicenamelength = devicename.length() + 1;
+      devicename.toCharArray(digitalStablesData.devicename, devicenamelength);
+      deviceshortname.toCharArray(digitalStablesData.deviceshortname, deviceshortname.length() + 1);
+      sensor1name.toCharArray(digitalStablesData.sensor1name, sensor1name.length() + 1);
+      sensor2name.toCharArray(digitalStablesData.sensor2name, sensor2name.length() + 1);
+
+    
+      secretManager.saveDeviceSensorConfig(devicename, deviceshortname, sensor1name, sensor2name, timezone, latitude, longitude);
+      
+
     } else if (command.startsWith("GetGroupId")) {
       String grpId = generalFunctions.getValue(command, '#', 1);
       lcd.print(F("groupid= "));
@@ -1177,6 +1137,10 @@ void loop() {
       } else {
         Serial.println(F("RUN"));
       }
+    } else if (command.startsWith("SetTimeFromInternet")) {
+      wifiManager.setTimeFromInternet();
+       lcd.print("Ok-SetTimeFromInternet");
+     
     } else if (command.startsWith("SetTime")) {
       //SetTime#8#5#24#4#18#22#25
       uint8_t switchState = digitalRead(OP_MODE);
@@ -1208,7 +1172,7 @@ void loop() {
       }
 
       Serial.flush();
-    // // delay(delayTime);
+      // // delay(delayTime);
     } else if (command.startsWith("GetSerialNumber")) {
       Serial.println(serialNumber);
       Serial.println("Ok-GetSerialNumber");
@@ -1221,7 +1185,7 @@ void loop() {
       if (validCode) result = "Ok-Valid Code";
       Serial.println(result);
       Serial.flush();
-     //// delay(delayTime);
+      //// delay(delayTime);
     } else if (command.startsWith("GetSecret")) {
       uint8_t switchState = digitalRead(OP_MODE);
       if (switchState == LOW) {
@@ -1233,7 +1197,7 @@ void loop() {
         Serial.println("Failure-GetSecret");
       }
       Serial.flush();
-    // // delay(delayTime);
+      // // delay(delayTime);
     } else if (command.startsWith("SetSecret")) {
       uint8_t switchState = digitalRead(OP_MODE);
       if (switchState == LOW) {
@@ -1244,7 +1208,7 @@ void loop() {
         secretManager.saveSecret(secret, numberDigits, periodSeconds);
         Serial.println("Ok-SetSecret");
         Serial.flush();
-       //// delay(delayTime);
+        //// delay(delayTime);
       } else {
         Serial.println("Failure-SetSecret");
       }
@@ -1259,7 +1223,7 @@ void loop() {
       inPulse = true;
       Serial.println("Ok-PulseStart");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
 
     } else if (command.startsWith("PulseFinished")) {
       display1.showNumberDec(8888, false);
@@ -1267,74 +1231,74 @@ void loop() {
       inPulse = false;
       Serial.println("Ok-PulseFinished");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
 
     } else if (command.startsWith("IPAddr")) {
       currentIpAddress = generalFunctions.getValue(command, '#', 1);
       Serial.println("Ok-IPAddr");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
     } else if (command.startsWith("SSID")) {
       String currentSSID = generalFunctions.getValue(command, '#', 1);
       wifiManager.setCurrentSSID(currentSSID.c_str());
       Serial.println("Ok-currentSSID");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
     } else if (command.startsWith("GetIpAddress")) {
       Serial.println(wifiManager.getIpAddress());
       Serial.println("Ok-GetIpAddress");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
     } else if (command.startsWith("RestartWifi")) {
       wifiManager.restartWifi();
       Serial.println("Ok-restartWifi");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
     } else if (command.startsWith("HostMode")) {
       Serial.println("Ok-HostMode");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
       isHost = true;
     } else if (command.startsWith("NetworkMode")) {
       Serial.println("Ok-NetworkMode");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
       isHost = false;
     } else if (command.startsWith("GetSensorData")) {
+        DigitalStablesDataSerializer digitalStablesDataSerializer;
+        digitalStablesDataSerializer.pushToSerial(Serial,digitalStablesData );
+        Serial.flush();
+        delay(delayTime);
 
-
-      Serial.println();
-      Serial.flush();
-     // delay(delayTime);
+  
     } else if (command.startsWith("AsyncData")) {
 
       lcd.setCursor(0, 1);
-      lcd.print("pnd=");
-      lcd.print(panchoTankFlowDataNewData);
-
-      lcd.print(" gnd=");
-      lcd.print(gloriaTankFlowPumpNewData);
-      lcd.print("    ");
-      if (panchoTankFlowDataNewData) {
-        panchoTankFlowSerializer.pushToSerial(Serial, panchoTankFlowData);
-        panchoTankFlowDataNewData = false;
-      }
-
+      lcd.print("AsybncData command=");
+  
       if (gloriaTankFlowPumpNewData) {
-        gloriaTankFlowPumpSerializer.pushToSerial(Serial, gloriaTankFlowPumpData);
+        //gloriaTankFlowPumpSerializer.pushToSerial(Serial, gloriaTankFlowPumpData);
+        dataManager.processGloriaQueue();
         gloriaTankFlowPumpNewData = false;
       }
 
-      Serial.println("Ok-AsyncCycleUpdate");
+    if (digitalStablesDataNewData) {
+       // digitalStablesDataSerializer.pushToSerial(Serial, digitalStablesData);
+       dataManager.processDigitalStablesDataQueue();
+        
+        digitalStablesDataNewData = false;
+      }
+      
+      Serial.println("Ok-AsyncData");
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
     } else if (command.startsWith("GetLifeCycleData")) {
       display1.showNumberDec(7777, false);
 
       CRGB orange = CRGB::Amethyst;
       CRGB orangered = CRGB::Azure;
       SetupTwoColorPalette(orange, orangered);
-      performLedShow(500);
+      //performLedShow(500);
       Serial.println("Ok-GetLifeCycleData");
       Serial.flush();
     } else if (command.startsWith("GetWPSSensorData")) {
@@ -1346,7 +1310,7 @@ void loop() {
       //
       Serial.println("Failure-Command Not Found-" + command);
       Serial.flush();
-     // delay(delayTime);
+      // delay(delayTime);
     }
     LoRa_rxMode();
     inSerial = false;
@@ -1449,7 +1413,7 @@ void checkPiControlButton() {
       CRGB orange = CRGB::Orange;
       CRGB orangered = CRGB::OrangeRed;
       SetupTwoColorPalette(orange, orangered);
-      performLedShow(500);
+      //performLedShow(500);
       for (int i = 12; i < 16; i++) {
         leds[i] = CRGB(0, 0, 255);
       }
@@ -1459,8 +1423,8 @@ void checkPiControlButton() {
   piControlLastState = piControlCurrentState;
 }
 void setStationMode(String ipAddress) {
-  Serial.println("settting Station mode, address ");
-  Serial.println(ipAddress);
+ if(debug) Serial.println("settting Station mode, address ");
+ if(debug) Serial.println(ipAddress);
   leds[0] = CRGB(0, 0, 255);
   FastLED.show();
   const uint8_t ip[] = {
@@ -1504,21 +1468,20 @@ void setStationMode(String ipAddress) {
   };
   display6.setSegments(vait, 4, 0);
   delay(3000);
-
 }
 
 void setApMode() {
 
   leds[0] = CRGB(0, 0, 255);
   FastLED.show();
-  Serial.println("settting AP mode");
+  if(debug)Serial.println("settting AP mode");
   //
   // set ap mode
   //
   //  wifiManager.configWifiAP("PanchoTankFlowV1", "", "PanchoTankFlowV1");
   String apAddress = wifiManager.getApAddress();
-  Serial.println("settting AP mode, address ");
-  Serial.println(apAddress);
+  if(debug)Serial.println("settting AP mode, address ");
+  if(debug)Serial.println(apAddress);
   const uint8_t ap[] = {
     SEG_F | SEG_G | SEG_A | SEG_B | SEG_C | SEG_E,  // A
     SEG_F | SEG_G | SEG_A | SEG_B | SEG_E           // P
@@ -1587,6 +1550,9 @@ void performLedShow(int millisseconds) {
 }
 
 int processDisplayValue(double valueF, struct DisplayData* displayData) {
+  if(debug)Serial.print("procesdisplay,valueF=");
+  if(debug)Serial.println(valueF);
+  
   int value = 0;
   if (valueF == (int)valueF) {
     if (valueF < 0) {
@@ -1630,10 +1596,10 @@ void SetupTwoColorPalette(CRGB color1, CRGB color2) {
   CRGB black = CRGB::Black;
 
   currentPalette = CRGBPalette16(
-                     color1, color1, black, black,
-                     color2, color2, black, black,
-                     color1, color1, black, black,
-                     color2, color2, black, black);
+    color1, color1, black, black,
+    color2, color2, black, black,
+    color1, color1, black, black,
+    color2, color2, black, black);
 }
 
 // This function sets up a palette of purple and green stripes.
@@ -1643,10 +1609,10 @@ void SetupPurpleAndGreenPalette() {
   CRGB black = CRGB::Black;
 
   currentPalette = CRGBPalette16(
-                     green, green, black, black,
-                     purple, purple, black, black,
-                     green, green, black, black,
-                     purple, purple, black, black);
+    green, green, black, black,
+    purple, purple, black, black,
+    green, green, black, black,
+    purple, purple, black, black);
 }
 // This function sets up a palette of black and white stripes,
 // using code.  Since the palette is effectively an array of
